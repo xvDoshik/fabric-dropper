@@ -1,0 +1,10 @@
+.gradle/
+build/
+run/
+.idea/
+*.iml
+out/
+.fabric/
+dist/
+*.zip
+mod.settings.properties
