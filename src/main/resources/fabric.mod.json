@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "id": "${mod_id}",
+  "version": "${version}",
+  "name": "${mod_name}",
+  "description": "${mod_description}",
+  "authors": ["${mod_authors}"],
+  "environment": "client",
+  "entrypoints": {
+    "client": ["com.godimod.GodiModClient"]
+  },
+  "depends": {
+    "fabricloader": ">=0.15.7",
+    "fabric-api": "*",
+    "minecraft": "1.20.1"
+  }
+}
