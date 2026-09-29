@@ -1,7 +1,7 @@
 -dontwarn **
 -dontnote **
--dontpreverify
 -allowaccessmodification
+-target 17
 -repackageclasses x
 -flattenpackagehierarchy x
 -overloadaggressively
